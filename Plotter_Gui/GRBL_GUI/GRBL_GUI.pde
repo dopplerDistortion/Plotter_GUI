@@ -1,9 +1,42 @@
 import processing.serial.*;
 import controlP5.*;
 import java.util.*;
+import geomerative.*;
+String[] gcode;
 
+int counter = 0;
+boolean remove = false;
+
+
+RShape grp;
+RPoint[][] pointPaths;
 Serial myPort;
 ControlP5 cp5;
+PShape bot;
+
+Alarm alarm;
+Command command;
+Messages messages;
+Textarea myTextarea;
+Textfield myTextfield;
+UI ui;
+
+FileType ft;
+
+String penUp= "M03 S600 \n G4P0.1 \n"; // Command to control the pen, it change beetween differents firmware
+String penDown = "M03 S200 \n G4P0.2 \n";// This settings was made for my custom CNC Drawing machine
+float[] xcoord = { 0,280};// These variables define the minimum and maximum position of each axis for your output GCode 
+float[] ycoord = { 0,220};// These settings also change between your configuration
+float neww, newh, rw, rh, xmaped, ymaped = 0.0;
+
+float xmag, ymag, newYmag, newXmag = 0;
+float z = 0;
+int tempw,temph=0;
+
+boolean ignoringStyles = false;
+boolean SEND_ONCE;
+int filesaved = 0;
+
 String val, Port[], selPort[], temp, path;
 int selection;
 int n, conFlag=0, printFlag = 0, index;
@@ -11,32 +44,36 @@ int selBaud[] = {
   115200,
   9600
 };
-String[] gcode;
 
-
-Alarm alarm;
-Command command;
-Messages messages;
-Textarea myTextarea;
-Textfield myTextfield;
+PShape s;
 
 void setup(){
-  size(800, 480); //make our canvas 200 x 200 pixels big
+  size(800, 480, P3D); //make our canvas 200 x 200 pixels big
+  
+  background(255);
   smooth();
   noStroke();
   frameRate(50);
   //  initialize your serial port and set the baud rate to 9600
-
+  RG.init(this);
+  RG.ignoreStyles(ignoringStyles);  
+  RG.setPolygonizer(RG.ADAPTATIVE);
+  
+  
   command = new Command();
   alarm = new Alarm();
   messages = new Messages();
+  ui= new UI();
 
+  ft = new FileType();
+  
+  
+  SEND_ONCE = false;
   cp5 = new ControlP5(this);
   cp5.enableShortcuts();
-
-  
+  cp5.setAutoDraw(false);
   index = 0;
-  setupScreen();
+  ui.dr();
   
   
   //myPort = new Serial(this, "COM3", 115200);
@@ -49,248 +86,12 @@ void setup(){
 }
 
 void draw(){
-  background(242, 244, 246);
-
+  translate(0,0);
+  hint(DISABLE_DEPTH_TEST);
+  cp5.draw();
+  hint(ENABLE_DEPTH_TEST);
 }
 
-void setupScreen(){
-  
-  List baud = Arrays.asList("115200", "9600");
-  List port = Arrays.asList(myPort.list());
-  selPort = myPort.list();
-  /* add a ScrollableList, by default it behaves like a DropdownList */
-  
-  cp5.addScrollableList("port")
-     .setPosition(10, 70)
-     .setSize(45, 100)
-     .setBarHeight(20)
-     .setItemHeight(20)
-     .addItems(port)
-     .setType(ScrollableList.DROPDOWN) // currently supported DROPDOWN and LIST
-     .setId(0);
-     ;
-  
-  cp5.addScrollableList("baudrate")
-     .setPosition(65, 70)
-     .setSize(45, 100)
-     .setBarHeight(20)
-     .setItemHeight(20)
-     .addItems(baud)
-     .setType(ScrollableList.DROPDOWN) // currently supported DROPDOWN and LIST
-     .setId(1)
-     ;
-  
-  cp5.addToggle("Connect")
-     .setPosition(10,30)
-     .setSize(100,20)
-     .setId(2)
-     .setColorCaptionLabel(30)
-     ;
-
-  //cp5.addButton("Settings")
-  //   .setPosition(10,120)
-  //   .setSize(100,20)
-  //   .setId(3)
-  //   ;
-  
-  //cp5.addButton("# parameters")
-  //   .setPosition(10,150)
-  //   .setSize(100,20)
-  //   .setId(4)
-  //   ;
-     
-  //cp5.addButton("parse state")
-  //   .setValue(0)
-  //   .setPosition(10,180)
-  //   .setSize(100,20)
-  //   .setId(5)
-  //   ;
-     
-  //cp5.addButton("build info")
-  //   .setValue(0)
-  //   .setPosition(10,210)
-  //   .setSize(100,20)
-  //   .setId(6)
-  //   ;
-     
-  //cp5.addButton("startup blocks")
-  //   .setValue(0)
-  //   .setPosition(10,240)
-  //   .setSize(100,20)
-  //   .setId(7)
-  //   ;
-     
-  //cp5.addButton("gcode mode")
-  //   .setValue(0)
-  //   .setPosition(10,270)
-  //   .setSize(100,20)
-  //   .setId(8)
-  //   ;
-     
-  //cp5.addButton("kill lock")
-  //   .setValue(0)
-  //   .setPosition(10,300)
-  //   .setSize(100,20)
-  //   .setId(9)
-  //   ;
-     
-  cp5.addButton("homing cycle")
-     .setValue(0)
-     .setPosition(10,160)
-     .setSize(100,20)
-     .setId(10)
-     ;
-     
-  //cp5.addButton("Reset Grbl")
-  //   .setValue(0)
-  //   .setPosition(10,360)
-  //   .setSize(100,20)
-  //   .setId(11)
-  //   ;
-     
-  cp5.addButton("Set Zero")
-     .setValue(0)
-     .setPosition(10,190)
-     .setSize(100,20)
-     .setId(12)
-     ;
-     
-  cp5.addButton("Return Zero")
-     .setValue(0)
-     .setPosition(10,220)
-     .setSize(100,20)
-     .setId(13)
-     ;
-     
-  cp5.addButton("Hand Shake")
-     .setValue(0)
-     .setPosition(10,250)
-     .setSize(100,20)
-     .setId(14)
-     ;
-     
-  cp5.addButton("LEFT")
-     .setValue(0)
-     .setPosition(10,360)
-     .setSize(50,50)
-     .setId(15)
-     ;
-     
-  cp5.addButton("UP")
-     .setValue(0)
-     .setPosition(70,300)
-     .setSize(50,50)
-     .setId(16)
-     ;
-     
-  cp5.addButton("RIGHT")
-     .setValue(0)
-     .setPosition(130,360)
-     .setSize(50,50)
-     .setId(17)
-     ;
-     
-  cp5.addButton("DOWN")
-     .setValue(0)
-     .setPosition(70,420)
-     .setSize(50,50)
-     .setId(18)
-     ;
-     
-  cp5.addButton("PEN UP")
-     .setValue(0)
-     .setPosition(70,360)
-     .setSize(50,20)
-     .setId(19)
-     ;
-     
-  cp5.addButton("PEN DOWN")
-     .setValue(0)
-     .setPosition(70,390)
-     .setSize(50,20)
-     .setId(20)
-     ;
-     
-     //TABS
-   
-   cp5.getTab("default")
-     .activateEvent(true)
-     .setLabel("Control")
-     .setId(50)
-     ;  
-     
-   cp5.getTab("eeprom")
-     .activateEvent(true)
-     .setLabel("EEPROM")
-     .setId(51)
-     ;
-     
-   cp5.getTab("gcode")
-     .activateEvent(true)
-     .setLabel("Gcode")
-     .setId(53)
-     ;
-     //Console
-   
-   cp5.addTextfield("default")
-     .setPosition(190,30)
-     .setAutoClear(true)
-     .setId(52)
-     .setLabel("")
-     ;
-     
-   //frameRate(20);
-   //myTextarea = cp5.addTextarea("txt")
-   //               .setPosition(190, 60)
-   //               .setSize(200, 410)
-   //               .setFont(createFont("", 10))
-   //               .setLineHeight(14)
-   //               .setColor(color(30))
-   //               .setColorBackground(color(0, 100))
-   //               .setColorForeground(color(255, 100))
-   //               ;
-   // ;
-  
-   // myTextarea.setText(console);
-    
-    
-    
-    //File Picker
-    
-    cp5.addButton("File")
-     .setPosition(10,30)
-     .setSize(100,20)
-     .setId(60)
-     .setLabel("Browse...")
-     ;
-    
-    myTextfield = cp5.addTextfield("textinput")
-                   .setPosition(120, 30)
-                   .setSize(400, 20)
-                   .setFocus(false)
-                   .setLabel("")
-                   ;
-                   
-  
-  cp5.addButton("clear")
-     .setPosition(530,30)
-     .setSize(50,20)
-     .setId(61)
-     .setLabel("Clear")
-     ;
-     
-  cp5.addButton("submit")
-     .setPosition(590,30)
-     .setSize(50,20)
-     .setId(62)
-     .setLabel("Submit")
-     ;
-     
-  cp5.getController("File").moveTo("gcode");
-  cp5.getController("textinput").moveTo("gcode");
-  cp5.getController("clear").moveTo("gcode");
-  cp5.getController("submit").moveTo("gcode");
-}
 
 void baudrate(int n) {
   println(n, selBaud[n]);
@@ -390,7 +191,21 @@ public void controlEvent(ControlEvent theEvent) {
     selectInput("Select a folder to process:", "fileSelected");
     break;
     case(62):
-    println("Printing...");
+    println("Generating...");
+    //bot = loadShape(path);
+    //shape(bot, 280, 40, xmaped, ymaped);
+    translate(490,265);
+    svg2gcode(path,0);
+    break;
+    case(65):
+    translate(490,265);
+    svg2gcode(path, PI/2.0);
+    break;
+    case(66):
+    translate(490,265);
+    svg2gcode(path,-PI/2.0);
+    break;
+    case(67):
     printFlag = 1;
     nextStep();
     break;
@@ -410,9 +225,11 @@ public void Connect(int theFlag){
     delay(3000);
     myPort.write("$X\n");
     myPort.write("$H\n");
+    printFlag = 0;
   }
   else{
     println("Connection Closed");
+    printFlag = 0;
     myPort.stop();
     conFlag = 0;
   }
@@ -432,8 +249,7 @@ void fileSelected(File selection) {
   } else {
     println("User selected " + selection.getAbsolutePath());
     path = selection.getAbsolutePath();
-    gcode = loadStrings(path);
-    
+    ft.filt(path);
     performTextfieldActions();
   }
 }
@@ -452,6 +268,105 @@ void submit(int theValue) {
   myTextfield.submit();
 }
 
+void svg2gcode(String x, float y){
+  String gcodecommand ="G0 F10000 \n G0"+ penUp; // String to store the Gcode we wil save later
+  String[] gcodecommandlist = {"0"};
+  float a;
+  path = x;
+  grp = RG.loadShape(x);
+  grp.rotate(y);
+  grp.centerIn(g, 100, 1, 1);
+  pointPaths = grp.getPointsInPaths();
+  pointPaths = grp.getPointsInPaths();
+  
+  newXmag = mouseX/float(width) * TWO_PI;
+  newYmag = mouseY/float(height) * TWO_PI;
+  
+  float diff = xmag-newXmag;
+  if (abs(diff) >  0.01) { xmag -= diff/4.0; }
+  
+  diff = ymag-newYmag;
+  if (abs(diff) >  0.01) { ymag -= diff/4.0; }
+  
+  //rotateX(-ymag); 
+  //rotateY(-xmag);
+  
+  background(255);
+  stroke(0);
+  noFill();
+  
+  rw = grp.width / xcoord[1];
+  rh = grp.height / ycoord[1];
+  
+  
+  if( filesaved == 0){
+  for(int i = 0; i<pointPaths.length; i++){
+    if (pointPaths[i] != null) {
+      tempw++;
+      for(int j = 0; j<pointPaths[i].length; j++){
+      temph++;
+      }
+    }
+  } 
+}
+  
+  println(grp.width,grp.height,tempw ,temph );
+  //grp.rotate(90);
+  //println(grp.width,grp.height);
+  if(rw >rh){
+    a = xcoord[1];
+  }
+  else{
+    a = ycoord[1];
+  }
+  
+
+
+  for(int i = 0; i<pointPaths.length; i++){
+    if (pointPaths[i] != null) {
+      
+      beginShape();
+      
+      for(int j = 0; j<pointPaths[i].length; j++){
+        vertex(pointPaths[i][j].x, pointPaths[i][j].y);
+        translate(0,0);
+        xmaped = map(pointPaths[i][j].x,-200, 200, 220, xcoord[0]);
+        ymaped = map(pointPaths[i][j].y,-200, 200, ycoord[0] , 220);
+        if(j == 1){
+          gcodecommand = gcodecommand + penDown;
+        }
+        gcodecommand = gcodecommand + "G1 X"+ str(xmaped)+" Y"+str(ymaped) +"\n"; 
+      }
+
+      endShape();
+
+    }
+   gcodecommand = gcodecommand + penUp + "\n" ;
+  
+   if(i == pointPaths.length-1){
+      //gcodecommand = "$H \n" ;
+      gcodecommandlist = split(gcodecommand, '\n');
+      saveStrings("temp.gcode", gcodecommandlist);
+      gcode = gcodecommandlist;
+      println("finished",gcodecommandlist.length);
+      remove = true;
+    }
+  }
+  int temp = gcodecommandlist.length;
+  for (int j = 0; j<=temp ; j++){
+      if(remove && gcodecommandlist.length > 0){
+      gcodecommandlist = pop(gcodecommandlist);
+      } 
+      
+      else {
+      gcodecommandlist = push(gcodecommandlist, str(counter));
+      counter += 1;
+      }
+      
+    }
+    println("fdeleted",gcodecommandlist.length);
+      remove = false;
+}
 void nextStep(){
    if (index < gcode.length){
      myPort.write(gcode[index]+ "\n");
@@ -463,3 +378,18 @@ void nextStep(){
      printFlag = 0;
    }
 }
+
+
+String[] push(String[] a, String element){
+  String[] b = new String[a.length+1];
+  b[0] = element;
+  System.arraycopy(a,0,b,1,a.length);
+  return b;
+}
+
+String[] pop(String[] a){
+  String[] b = new String[a.length-1];
+  System.arraycopy(a,0,b,0,a.length-1);
+  return b;
+}
+ 
